@@ -34,6 +34,9 @@ extension_dict = {
     'application/pdf': '.pdf'
 }
 
+# Set platform-specific global variables
+destination_folder = ''
+
 
 def get_driver():
     # Sets the path to chrome and chromedriver executables
@@ -47,7 +50,7 @@ def get_driver():
         elif os.path.exists("/usr/bin/chromium"):
             path_chrome = "/usr/bin/chromium"
         else:
-            path_chrome = input('''ukey-downloader Chrome kurulumunu bulamadı. 
+            path_chrome = input('''ukeydl Chrome kurulumunu bulamadı. 
             Lütfen chrome çalıştırılabilir dosyasının tam konumunu giriniz: ''')
             if not os.path.exists(path_chrome):
                 print("böyle bir dosya yok ki :(")
@@ -126,48 +129,42 @@ def get_time_dif(start):
 def download_for_current_class(driver, session, link_of_class, name_of_class):
     driver.get(link_of_class)
     driver.get("https://ukey.uludag.edu.tr/Ogrenci/DersMateryalleri")
+
     try:
-        tr_list = WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.TAG_NAME, "tbody"))).find_elements(
-            By.TAG_NAME, "tr")
-        for tr in tr_list:
-            diger = True
-            td_list = tr.find_elements(By.TAG_NAME, "td")
-            for td in td_list:
-                if td.text == "Haftalık Ders Notu":
-                    diger = False
+        tr_list = WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.TAG_NAME, "tbody"))).find_elements(By.TAG_NAME, "tr")
+        
+        # Creates directory for specified class
+        class_n = [to_ascii(x) for x in name_of_class.split(" - ")]
+        dest_dir = destination_folder + "-".join(class_n[1].split(" "))
+        if not os.path.isdir(dest_dir):
+            os.mkdir(dest_dir)
 
-                if td.text == "Dosyayı Aç":
-                    class_n = [to_ascii(x) for x in name_of_class.split(" - ")]
-                    dest_dir = destination_folder + "-".join(class_n[1].split(" "))
-                    if not os.path.isdir(dest_dir):
-                        os.mkdir(dest_dir)
+        for i in range(2, len(tr_list) + 1):
+            td = driver.find_element(By.XPATH, f"//table/tbody/tr[{i}]/td[7]")
+            if td.text == "Dosyayı Aç":
+                link = td.find_element(By.TAG_NAME, "a").get_attribute("href")
+                week_num = driver.find_element(By.XPATH, f"//table/tbody/tr[{i}]/td[4]").text
+                name_str = driver.find_element(By.XPATH, f"//table/tbody/tr[{i}]/td[2]").text
+                print('[download]: İndirilen dosya: ' + week_num + "_" + class_n[0] + "_" + name_str)
 
-                    link = td.find_element(By.TAG_NAME, "a").get_attribute("href")
-                    if diger:
-                        name_list = tr.text.split(" ")[:-4]
-                    else:
-                        name_list = tr.text.split(" ")[:-6]
-
-                    name_str = to_ascii("-".join(name_list))
-                    week_num = tr.text.split(" ")[-3]
-
-                    print('[download]: İndirilen dosya: ' + week_num + "_" + class_n[0] + "_" + name_str)
-
-                    # Get Request
-                    start = time.time()
-                    r = session.get(link, allow_redirects=True)  # , headers=headers
-                    print(f'[download]: GET isteği için geçen süre: {get_time_dif(start)}')
+                # Get Request
+                start = time.time()
+                r = session.get(link, allow_redirects=True)
+                print(f'[download]: GET isteği için geçen süre: {get_time_dif(start)}')
+                
+                try:
                     # gets file extension (for example:".pdf")
                     content_type = r.headers['content-type']
                     f_type = extension_dict[content_type]
                     print(f'[download]: Dosya uzantısı: {f_type}')
-
                     # writing to file
                     start = time.time()
                     with open(os.path.join(dest_dir, week_num + "_" + name_str + f_type), "wb") as file:
                         for chunk in r.iter_content(chunk_size=128):
                             file.write(chunk)
                     print(f'[download]: Dosya kaydı için geçen süre: {get_time_dif(start)}\n\n')
+                except:
+                    print("\nDosya Uzantisi desteklenmiyor veya site hata veriyor!\n")
 
     except:
         print('[download]: Bu sayfada indirilebilir içerik bulunamadı!')
@@ -177,7 +174,7 @@ def download_for_current_class(driver, session, link_of_class, name_of_class):
 
 
 def msg(message):
-    print(f'[ukey-downloader]: {message}')
+    print(f'[ukeydl]: {message}')
 
 
 def main():
@@ -209,14 +206,13 @@ def main():
 
     msg('İlk indirme işlemi biraz vakit alabilir, işlem zamanla hızlanacaktır.')
 
-    # Set platform-specific global variables
     global destination_folder
     if sys.platform == "win32":
         destination_folder = os.path.expandvars('%userprofile%/Downloads/ukey-download/')
     elif sys.platform == "linux":
         destination_folder = os.path.expandvars('$HOME/Downloads/ukey-download/')
     else:
-        destination_folder = input('''ukey-downloader işletim sistemini desteklemiyor.
+        destination_folder = input('''ukeydl işletim sistemini desteklemiyor.
         ancak yine de indirme işlemini deneyebilirsin.
         ders klasörlerinin yerleştirileceği klasörü belirt: ''')
 
@@ -230,7 +226,7 @@ def main():
     driver.quit()
     msg(f"UKEY'de bulunan tüm dersler indirildi! İndirme klasörü: {destination_folder}")
     msg(f"İndirme işlemi {get_time_dif(start)} saniyede tamamlandı.")
-    print(f'ukey-downloader\'ı kullandığın için teşekkür ederiz!')
+    print(f'ukeydl\'i kullandığın için teşekkür ederiz!')
     time.sleep(15)
 
 
